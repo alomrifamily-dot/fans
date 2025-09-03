@@ -1,11 +1,165 @@
-<!DOCTYPE html> 
-<html lang="ar"> 
-<head> 
-    <meta charset="UTF-8"> 
-    <title>Fans Wallet</title> 
-</head> 
-<body> 
-    <h1>ꩥ��� �� �� ���� Fans ??</h1> 
-    <p>�馧� ���� �뤟� ��� Render.</p> 
-</body> 
-</html> 
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>Fans Wallet</title>
+  <style>
+    body { font-family: Tahoma, Arial, sans-serif; text-align: center; margin: 24px; background: #f4f6f9; }
+    h1 { color: #2c3e50; margin-bottom: 8px; }
+    .bar { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin: 10px 0 22px; }
+    input, button {
+      padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;
+    }
+    button { background:#2563eb; color:#fff; border:none; cursor:pointer; }
+    button.secondary { background:#111827; }
+    .card {
+      margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;
+      width: min(420px, 92%); background: #fff; box-shadow: 0 8px 20px rgba(0,0,0,.06);
+    }
+    .points { color: #16a34a; font-size: 20px; }
+    .money  { color: #2563eb; font-size: 20px; }
+    .updated { font-size: 12px; color: #6b7280; margin-top: 10px; }
+    .muted { color:#6b7280; font-size:13px; }
+    /* Toast */
+    #toast {
+      position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; background: #111827; color: #fff;
+      padding: 12px 16px; border-radius: 8px; font-size: 15px; box-shadow: 0 10px 20px rgba(0,0,0,.15);
+      opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 9999;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+  </style>
+</head>
+<body>
+  <h1>💳 محفظة المشجع - Fans 🚀</h1>
+  <p class="muted">الخدمة تعمل على Render</p>
+
+  <div class="bar">
+    <label for="fanInput">المستخدم (fanId):</label>
+    <input id="fanInput" type="text" placeholder="مثال: fan_123" />
+    <button id="applyFan">تطبيق</button>
+    <button id="claimBtn" class="secondary" title="اختبار فقط: يطلب 50 نقطة">+ نقاط اختبار</button>
+  </div>
+
+  <div id="wallet" class="card">
+    <p>جاري تحميل بيانات المحفظة...</p>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // ==== الأدوات العامة ====
+    const walletBox = document.getElementById("wallet");
+    const toastEl   = document.getElementById("toast");
+    const fanInput  = document.getElementById("fanInput");
+    const applyFan  = document.getElementById("applyFan");
+    const claimBtn  = document.getElementById("claimBtn");
+
+    // قراءة / كتابة معرّف المستخدم من/إلى الرابط
+    function getFanIdFromURL() {
+      const params = new URLSearchParams(location.search);
+      return params.get("fan") || "fan_123";
+    }
+    function setFanIdInURL(fanId) {
+      const url = new URL(location.href);
+      url.searchParams.set("fan", fanId);
+      history.replaceState({}, "", url.toString());
+    }
+
+    let fanId = getFanIdFromURL();
+    fanInput.value = fanId;
+
+    // Toast & Notification
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 3500);
+    }
+    function notify(msg) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        try { new Notification("محفظة Fans", { body: msg }); } catch (_) { showToast(msg); }
+      } else {
+        showToast(msg);
+      }
+    }
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(()=>{});
+    }
+
+    // ==== منطق المحفظة ====
+    let prevPoints = null, prevMoney = null, firstLoad = true, timer = null;
+
+    async function loadWallet() {
+      try {
+        const res  = await fetch(`/api/wallet/${encodeURIComponent(fanId)}`, { cache: "no-store" });
+        const data = await res.json();
+
+        const points = data?.wallet?.points ?? 0;
+        const money  = data?.wallet?.money ?? 0;
+
+        walletBox.innerHTML = `
+          <h3>📌 المستخدم: <code>${fanId}</code></h3>
+          <p class="points">النقاط: ${points}</p>
+          <p class="money">الرصيد: ${money} ريال</p>
+          <p class="updated">⏱ آخر تحديث: ${new Date().toLocaleTimeString()}</p>
+        `;
+
+        if (!firstLoad) {
+          if (prevPoints !== null && points > prevPoints) {
+            notify(`🎉 تمت إضافة ${points - prevPoints} نقطة!`);
+          }
+          if (prevMoney !== null && money > prevMoney) {
+            notify(`💰 زاد الرصيد بمقدار ${money - prevMoney} ريال!`);
+          }
+        }
+        prevPoints = points; prevMoney = money; firstLoad = false;
+
+      } catch (err) {
+        walletBox.innerHTML = "<p style='color:red'>فشل تحميل البيانات ❌</p>";
+        console.error("Error loading wallet:", err);
+      }
+    }
+
+    function startAutoRefresh() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(loadWallet, 10000);
+    }
+
+    // تغيير المعرّف من الواجهة
+    applyFan.addEventListener("click", () => {
+      const newId = (fanInput.value || "").trim();
+      if (!newId) return showToast("اكتب معرّف المستخدم أولاً");
+      if (newId === fanId) return showToast("لا يوجد تغيير في المعرّف");
+      fanId = newId;
+      setFanIdInURL(fanId);
+      showToast(`تم تغيير المستخدم إلى: ${fanId}`);
+      // إعادة ضبط حالة المقارنة حتى لا يصدر تنبيه عند أول قراءة بعد التبديل
+      prevPoints = prevMoney = null; firstLoad = true;
+      loadWallet();
+    });
+
+    // زر اختبار (يطلب 50 نقطة للـ fan الحالي)
+    claimBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/wallet/award", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fanId, currency: "POINTS", amount: 50, reason: "Test award (UI)" })
+        });
+        const data = await res.json();
+        if (data?.ok) {
+          notify("✅ تم طلب إضافة 50 نقطة (اختبار).");
+          loadWallet();
+        } else {
+          showToast("❌ فشل طلب الإضافة.");
+        }
+      } catch (e) {
+        showToast("❌ خطأ أثناء الطلب.");
+      }
+    });
+
+    // تشغيل أولي
+    loadWallet();
+    startAutoRefresh();
+  </script>
+</body>
+</html>
