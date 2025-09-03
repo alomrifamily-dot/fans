@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fans Wallet • المحفظة</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="assets/config.js"></script>
+</head>
+<body class="bg-slate-50">
+  <main class="max-w-5xl mx-auto p-6 space-y-6">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl font-extrabold">المحفظة</h1>
+      <a class="text-sm underline" href="index.html">الصفحة الرئيسية</a>
+    </header>
+
+    <section class="bg-white rounded-2xl shadow p-6">
+      <div class="grid md:grid-cols-3 gap-3 items-end">
+        <div>
+          <label class="text-sm">Fan ID</label>
+          <input id="fanId" class="w-full border rounded px-3 py-2" placeholder="fan_123" value="fan_123">
+        </div>
+        <button onclick="loadBalance()" class="h-10 rounded bg-emerald-600 text-white">تحميل الرصيد + السجل</button>
+        <div id="balances" class="text-sm text-slate-700"></div>
+      </div>
+    </section>
+
+    <section class="grid md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+        <h2 class="font-bold">منح (Award)</h2>
+        <div class="grid grid-cols-2 gap-3 items-end">
+          <select id="awardCurrency" class="border rounded px-3 py-2">
+            <option value="POINTS">POINTS</option>
+            <option value="MONEY">MONEY</option>
+          </select>
+          <input id="awardAmount" type="number" class="border rounded px-3 py-2" placeholder="الكمية" value="100">
+          <input id="awardReason" class="col-span-2 border rounded px-3 py-2" placeholder="السبب" value="welcome bonus">
+        </div>
+        <button onclick="award()" class="px-4 py-2 rounded bg-emerald-600 text-white">تنفيذ</button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+        <h2 class="font-bold">استبدال نقاط (Redeem)</h2>
+        <input id="redeemPoints" type="number" class="border rounded px-3 py-2" placeholder="عدد النقاط" value="50">
+        <input id="redeemReason" class="border rounded px-3 py-2" placeholder="السبب" value="redeem via UI">
+        <button onclick="redeem()" class="px-4 py-2 rounded bg-emerald-600 text-white">تنفيذ</button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+        <h2 class="font-bold">سحب أموال (Withdraw)</h2>
+        <input id="withdrawAmount" type="number" class="border rounded px-3 py-2" placeholder="المبلغ" value="20">
+        <input id="withdrawReason" class="border rounded px-3 py-2" placeholder="السبب" value="payout">
+        <button onclick="withdraw()" class="px-4 py-2 rounded bg-emerald-600 text-white">تنفيذ</button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+        <h2 class="font-bold">تحويل (Convert)</h2>
+        <div class="grid grid-cols-2 gap-3 items-end">
+          <select id="convertDirection" class="border rounded px-3 py-2">
+            <option value="MONEY_TO_POINTS">MONEY → POINTS</option>
+            <option value="POINTS_TO_MONEY">POINTS → MONEY</option>
+          </select>
+          <input id="convertAmount" type="number" class="border rounded px-3 py-2" placeholder="القيمة" value="10">
+        </div>
+        <button onclick="convert()" class="px-4 py-2 rounded bg-emerald-600 text-white">تنفيذ</button>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow p-6">
+      <h2 class="font-bold mb-2">النتيجة</h2>
+      <pre id="out" class="bg-slate-900 text-emerald-400 p-3 rounded overflow-x-auto"></pre>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow p-6">
+      <h2 class="font-bold mb-2">السجل (Ledger)</h2>
+      <pre id="ledger" class="bg-slate-900 text-indigo-200 p-3 rounded overflow-x-auto"></pre>
+    </section>
+  </main>
+
+<script>
+function q(id){ return document.getElementById(id); }
+async function api(path, body){
+  const r = await fetch(API_BASE + path, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+async function loadBalance(){
+  const fanId = q("fanId").value.trim();
+  const [b, l] = await Promise.all([
+    fetch(API_BASE + "/api/wallet/" + fanId).then(r=>r.json()),
+    fetch(API_BASE + "/api/wallet/" + fanId + "/ledger?limit=20").then(r=>r.json())
+  ]);
+  q("balances").innerHTML = "النقاط: <b>"+(b.wallet?.points||0)+"</b> • الأموال: <b>"+(b.wallet?.money||0)+"</b>";
+  q("ledger").textContent = JSON.stringify(l, null, 2);
+}
+async function award(){
+  const payload = {
+    fanId: q("fanId").value.trim(),
+    currency: q("awardCurrency").value,
+    amount: Number(q("awardAmount").value||0),
+    reason: q("awardReason").value
+  };
+  const res = await api("/api/wallet/award", payload);
+  q("out").textContent = JSON.stringify(res, null, 2);
+  loadBalance();
+}
+async function redeem(){
+  const payload = {
+    fanId: q("fanId").value.trim(),
+    points: Number(q("redeemPoints").value||0),
+    reason: q("redeemReason").value
+  };
+  const res = await api("/api/wallet/redeem", payload);
+  q("out").textContent = JSON.stringify(res, null, 2);
+  loadBalance();
+}
+async function withdraw(){
+  const payload = {
+    fanId: q("fanId").value.trim(),
+    amount: Number(q("withdrawAmount").value||0),
+    reason: q("withdrawReason").value
+  };
+  const res = await api("/api/wallet/withdraw", payload);
+  q("out").textContent = JSON.stringify(res, null, 2);
+  loadBalance();
+}
+async function convert(){
+  const payload = {
+    fanId: q("fanId").value.trim(),
+    direction: q("convertDirection").value,
+    amount: Number(q("convertAmount").value||0)
+  };
+  const res = await api("/api/wallet/convert", payload);
+  q("out").textContent = JSON.stringify(res, null, 2);
+  loadBalance();
+}
+loadBalance();
+</script>
+</body>
+</html>
